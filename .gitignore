@@ -1,0 +1,11 @@
+# Fichiers du sujet et notes personnelles : ne pas publier
+docs/historique.txt
+docs/sujet/
+docs/captures/
+
+# Python
+__pycache__/
+*.pyc
+
+# Fichiers temporaires de Word
+~$*

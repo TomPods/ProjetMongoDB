@@ -5,8 +5,8 @@ PARTIE 0 - L'IDÉE GÉNÉRALE (à lire d'abord)
 -------------------------------------------
 
 Docker permet de faire tourner plein de petits "ordinateurs" dans notre
-ordinateur. Chacun s'appelle un CONTENEUR. Au lieu d'acheter 12 vrais serveurs,
-on lance 12 conteneurs. Chaque conteneur est une boîte isolée qui contient un
+ordinateur. Chacun s'appelle un CONTENEUR. Au lieu d'acheter 19 vrais serveurs,
+on lance 19 conteneurs. Chaque conteneur est une boîte isolée qui contient un
 programme (ici MongoDB).
 
 Le fichier docker-compose.yml est le PLAN de tous ces conteneurs. Il dit :
@@ -175,6 +175,9 @@ PARTIE 2 - LES OPTIONS DE MONGODB (dans "command")
   Dans le projet : principal_a, secondaire_a_1, secondaire_a_2 et
   secondaire_a_3 reçoivent tous --replSet rs_a, donc ils forment un groupe de
   4 membres. Pareil pour rs_b et rs_c.
+  Détail : le 3e secondaire de chaque groupe est NON VOTANT (il garde une copie
+  des données mais ne vote pas), pour qu'il reste un nombre impair de votants
+  (3) et qu'une égalité lors d'une élection soit impossible.
   Attention : écrire l'option ne suffit pas. Il faut ensuite lancer UNE FOIS la
   commande rs.initiate(...) dans mongosh pour dire "voici les membres du
   groupe".

@@ -1,0 +1,155 @@
+# =====================================================================
+# Cluster MongoDB : plan de tous les conteneurs
+# Étape actuelle : serveurs de configuration (rs_config) + premier shard (rs_a)
+# =====================================================================
+
+# Nom du projet Compose : préfixe des réseaux et des volumes créés.
+name: cluster_mongo
+
+# ---------------------------------------------------------------------
+# Modèle commun aux serveurs de configuration.
+# "&config-commun" donne un nom à ce bloc ; chaque service le réutilise
+# avec "<<: *config-commun" pour ne pas recopier 3 fois les mêmes lignes.
+# (Le préfixe "x-" dit à Compose d'ignorer ce bloc : ce n'est pas un service.)
+# ---------------------------------------------------------------------
+x-config-commun: &config-commun
+  image: mongo:8.3.11              # version précise de MongoDB, la même pour tous
+  restart: unless-stopped          # redémarre après un plantage, sauf arrêt volontaire
+  networks:
+    - reseau_mongo                 # réseau privé partagé par tous les serveurs
+  command: >
+    mongod
+    --configsvr
+    --replSet rs_config
+    --port 27019
+    --bind_ip_all
+    --wiredTigerCacheSizeGB 0.25
+  # --configsvr                : ce serveur est un serveur de configuration
+  # --replSet rs_config        : il fait partie du groupe de copies "rs_config"
+  # --port 27019               : port par défaut des serveurs de configuration
+  # --bind_ip_all              : accepte les connexions des autres conteneurs
+  # --wiredTigerCacheSizeGB    : limite la mémoire de cache (0.25 Go est le minimum),
+  #                              indispensable avec une vingtaine de MongoDB
+  healthcheck:
+    test: ["CMD", "mongosh", "--port", "27019", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+    interval: 5s                   # un contrôle toutes les 5 secondes
+    timeout: 5s                    # un contrôle raté s'il dure plus de 5 secondes
+    retries: 10                    # "unhealthy" après 10 échecs de suite
+    start_period: 10s              # délai de grâce au démarrage
+
+# ---------------------------------------------------------------------
+# Modèle commun aux serveurs de données (shards) : principaux et secondaires.
+# La commande (donc le nom du groupe) est écrite dans chaque service.
+# ---------------------------------------------------------------------
+x-shard-commun: &shard-commun
+  image: mongo:8.3.11
+  restart: unless-stopped
+  networks:
+    - reseau_mongo
+  depends_on:                      # démarrer APRÈS les serveurs de configuration
+    config_1:
+      condition: service_healthy   # "healthy" = MongoDB répond vraiment (voir healthcheck)
+    config_2:
+      condition: service_healthy
+    config_3:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD", "mongosh", "--port", "27018", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+    interval: 5s
+    timeout: 5s
+    retries: 10
+    start_period: 10s
+
+# ---------------------------------------------------------------------
+# Les conteneurs
+# ---------------------------------------------------------------------
+services:
+
+  config_1:
+    <<: *config-commun
+    container_name: config_1
+    volumes:
+      - donnees_config_1:/data/configdb   # /data/configdb : dossier de données d'un serveur de config
+    ports:
+      - "127.0.0.1:27119:27019"           # accessible depuis ce PC seulement (mise au point)
+
+  config_2:
+    <<: *config-commun
+    container_name: config_2
+    volumes:
+      - donnees_config_2:/data/configdb
+    ports:
+      - "127.0.0.1:27120:27019"
+
+  config_3:
+    <<: *config-commun
+    container_name: config_3
+    volumes:
+      - donnees_config_3:/data/configdb
+    ports:
+      - "127.0.0.1:27121:27019"
+
+  # ---- Shard 1 : groupe rs_a (1 principal + 3 secondaires) ----------
+  # --shardsvr : ce serveur stocke une partie des données (un "shard")
+  # --replSet rs_a : même nom de groupe pour les 4 serveurs
+  # --port 27018 : port par défaut d'un serveur de shard
+  # Le 3e secondaire est NON VOTANT : ce réglage se fait dans lancer.py
+  # (rs.initiate), pas ici.
+  principal_a:
+    <<: *shard-commun
+    container_name: principal_a
+    command: >
+      mongod --shardsvr --replSet rs_a --port 27018 --bind_ip_all
+      --wiredTigerCacheSizeGB 0.25
+    volumes:
+      - donnees_principal_a:/data/db      # /data/db : dossier de données d'un serveur ordinaire
+    ports:
+      - "127.0.0.1:27211:27018"
+
+  secondaire_a_1:
+    <<: *shard-commun
+    container_name: secondaire_a_1
+    command: >
+      mongod --shardsvr --replSet rs_a --port 27018 --bind_ip_all
+      --wiredTigerCacheSizeGB 0.25
+    volumes:
+      - donnees_secondaire_a_1:/data/db
+    ports:
+      - "127.0.0.1:27212:27018"
+
+  secondaire_a_2:
+    <<: *shard-commun
+    container_name: secondaire_a_2
+    command: >
+      mongod --shardsvr --replSet rs_a --port 27018 --bind_ip_all
+      --wiredTigerCacheSizeGB 0.25
+    volumes:
+      - donnees_secondaire_a_2:/data/db
+    ports:
+      - "127.0.0.1:27213:27018"
+
+  secondaire_a_3:
+    <<: *shard-commun
+    container_name: secondaire_a_3
+    command: >
+      mongod --shardsvr --replSet rs_a --port 27018 --bind_ip_all
+      --wiredTigerCacheSizeGB 0.25
+    volumes:
+      - donnees_secondaire_a_3:/data/db
+    ports:
+      - "127.0.0.1:27214:27018"
+
+# ---------------------------------------------------------------------
+# Réseau et volumes
+# ---------------------------------------------------------------------
+networks:
+  reseau_mongo:
+
+volumes:                           # un coffre de données par serveur
+  donnees_config_1:
+  donnees_config_2:
+  donnees_config_3:
+  donnees_principal_a:
+  donnees_secondaire_a_1:
+  donnees_secondaire_a_2:
+  donnees_secondaire_a_3:
