@@ -1,6 +1,6 @@
 # =====================================================================
 # Cluster MongoDB : plan de tous les conteneurs
-# Étape actuelle : serveurs de configuration (rs_config) + premier shard (rs_a)
+# Étape actuelle : serveurs de configuration (rs_config) + les 3 shards (rs_a, rs_b, rs_c)
 # =====================================================================
 
 # Nom du projet Compose : préfixe des réseaux et des volumes créés.
@@ -139,6 +139,98 @@ services:
     ports:
       - "127.0.0.1:27214:27018"
 
+  # ---- Shard 2 : groupe rs_b (1 principal + 3 secondaires) ----------
+  # Même modèle que rs_a ; le secondaire_b_3 est NON VOTANT (réglé dans lancer.py).
+  principal_b:
+    <<: *shard-commun
+    container_name: principal_b
+    command: >
+      mongod --shardsvr --replSet rs_b --port 27018 --bind_ip_all
+      --wiredTigerCacheSizeGB 0.25
+    volumes:
+      - donnees_principal_b:/data/db
+    ports:
+      - "127.0.0.1:27221:27018"
+
+  secondaire_b_1:
+    <<: *shard-commun
+    container_name: secondaire_b_1
+    command: >
+      mongod --shardsvr --replSet rs_b --port 27018 --bind_ip_all
+      --wiredTigerCacheSizeGB 0.25
+    volumes:
+      - donnees_secondaire_b_1:/data/db
+    ports:
+      - "127.0.0.1:27222:27018"
+
+  secondaire_b_2:
+    <<: *shard-commun
+    container_name: secondaire_b_2
+    command: >
+      mongod --shardsvr --replSet rs_b --port 27018 --bind_ip_all
+      --wiredTigerCacheSizeGB 0.25
+    volumes:
+      - donnees_secondaire_b_2:/data/db
+    ports:
+      - "127.0.0.1:27223:27018"
+
+  secondaire_b_3:
+    <<: *shard-commun
+    container_name: secondaire_b_3
+    command: >
+      mongod --shardsvr --replSet rs_b --port 27018 --bind_ip_all
+      --wiredTigerCacheSizeGB 0.25
+    volumes:
+      - donnees_secondaire_b_3:/data/db
+    ports:
+      - "127.0.0.1:27224:27018"
+
+  # ---- Shard 3 : groupe rs_c (1 principal + 3 secondaires) ----------
+  # Même modèle que rs_a ; le secondaire_c_3 est NON VOTANT (réglé dans lancer.py).
+  principal_c:
+    <<: *shard-commun
+    container_name: principal_c
+    command: >
+      mongod --shardsvr --replSet rs_c --port 27018 --bind_ip_all
+      --wiredTigerCacheSizeGB 0.25
+    volumes:
+      - donnees_principal_c:/data/db
+    ports:
+      - "127.0.0.1:27231:27018"
+
+  secondaire_c_1:
+    <<: *shard-commun
+    container_name: secondaire_c_1
+    command: >
+      mongod --shardsvr --replSet rs_c --port 27018 --bind_ip_all
+      --wiredTigerCacheSizeGB 0.25
+    volumes:
+      - donnees_secondaire_c_1:/data/db
+    ports:
+      - "127.0.0.1:27232:27018"
+
+  secondaire_c_2:
+    <<: *shard-commun
+    container_name: secondaire_c_2
+    command: >
+      mongod --shardsvr --replSet rs_c --port 27018 --bind_ip_all
+      --wiredTigerCacheSizeGB 0.25
+    volumes:
+      - donnees_secondaire_c_2:/data/db
+    ports:
+      - "127.0.0.1:27233:27018"
+
+  secondaire_c_3:
+    <<: *shard-commun
+    container_name: secondaire_c_3
+    command: >
+      mongod --shardsvr --replSet rs_c --port 27018 --bind_ip_all
+      --wiredTigerCacheSizeGB 0.25
+    volumes:
+      - donnees_secondaire_c_3:/data/db
+    ports:
+      - "127.0.0.1:27234:27018"
+
 # ---------------------------------------------------------------------
 # Réseau et volumes
 # ---------------------------------------------------------------------
@@ -153,3 +245,11 @@ volumes:                           # un coffre de données par serveur
   donnees_secondaire_a_1:
   donnees_secondaire_a_2:
   donnees_secondaire_a_3:
+  donnees_principal_b:
+  donnees_secondaire_b_1:
+  donnees_secondaire_b_2:
+  donnees_secondaire_b_3:
+  donnees_principal_c:
+  donnees_secondaire_c_1:
+  donnees_secondaire_c_2:
+  donnees_secondaire_c_3:

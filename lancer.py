@@ -1,7 +1,7 @@
 """Lance le cluster MongoDB : une seule commande, "python lancer.py".
 
-Étape actuelle : serveurs de configuration (rs_config) + premier shard (rs_a).
-Les autres éléments (shards rs_b et rs_c, routeurs, proxy, historique)
+Étape actuelle : serveurs de configuration (rs_config) + les 3 shards
+(rs_a, rs_b, rs_c). Les autres éléments (routeurs, proxy, historique)
 s'ajouteront ici, dans l'ordre imposé par la documentation MongoDB :
 configuration, puis shards, puis routeurs.
 """
@@ -36,19 +36,30 @@ CONFIG = {
     ],
 }
 
-SHARD_A = {
-    "nom": "rs_a",
-    "port": 27018,
-    "configsvr": False,
-    "membres": [
-        membre("principal_a", 27211, priority=2),        # préféré comme chef
-        membre("secondaire_a_1", 27212),
-        membre("secondaire_a_2", 27213),
-        membre("secondaire_a_3", 27214, priority=0, votes=0),   # NON VOTANT
-    ],
-}
+def shard(lettre, port_hote_depart):
+    """Décrit un shard : 1 principal + 3 secondaires, le 3e secondaire étant non votant.
 
-SHARDS = [SHARD_A]
+    Les ports ouverts sur ce PC se suivent : 27211 à 27214 pour le groupe a,
+    27221 à 27224 pour le groupe b, 27231 à 27234 pour le groupe c.
+    """
+    return {
+        "nom": f"rs_{lettre}",
+        "port": 27018,
+        "configsvr": False,
+        "membres": [
+            membre(f"principal_{lettre}", port_hote_depart, priority=2),     # préféré comme chef
+            membre(f"secondaire_{lettre}_1", port_hote_depart + 1),
+            membre(f"secondaire_{lettre}_2", port_hote_depart + 2),
+            membre(f"secondaire_{lettre}_3", port_hote_depart + 3, priority=0, votes=0),   # NON VOTANT
+        ],
+    }
+
+
+SHARD_A = shard("a", 27211)
+SHARD_B = shard("b", 27221)
+SHARD_C = shard("c", 27231)
+
+SHARDS = [SHARD_A, SHARD_B, SHARD_C]
 GROUPES = [CONFIG] + SHARDS     # ordre de démarrage : configuration d'abord
 
 
@@ -147,4 +158,4 @@ if __name__ == "__main__":
     print("4/4  Vérification...")
     for g in GROUPES:
         afficher_etat(g)
-    print("\nCluster prêt (étape actuelle : configuration + shard rs_a).")
+    print("\nCluster prêt (étape actuelle : configuration + shards rs_a, rs_b, rs_c).")

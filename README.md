@@ -11,15 +11,14 @@ et **réplication** (chaque groupe garde plusieurs copies des données).
 | Élément | État |
 |---|---|
 | 3 serveurs de configuration (`rs_config`) | fait et testé |
-| Shard `rs_a` (1 principal + 3 secondaires) | fait et testé |
-| Shards `rs_b` et `rs_c` | à faire |
+| Shards `rs_a`, `rs_b`, `rs_c` (1 principal + 3 secondaires chacun) | fait et testé |
 | 2 routeurs, déclaration des shards, import de `books` | à faire |
 | Proxy (point d'entrée sur le port 27017) | à faire |
 | Serveur d'historique (retour à une version antérieure) | à faire |
 | Test Python complet, documentation finale, version sécurisée | à faire |
 
 La commande `python lancer.py` lance pour l'instant ce qui est fait : les
-serveurs de configuration et le shard `rs_a`.
+serveurs de configuration et les 3 shards (15 conteneurs).
 
 ## L'architecture visée (19 conteneurs)
 
@@ -41,7 +40,7 @@ et qu'une égalité lors d'une élection soit impossible.
 
 - Docker Desktop (allumé) et Docker Compose
 - Python 3 avec le module `pymongo` : `python -m pip install pymongo`
-- Les ports 27119 à 27121 et 27211 à 27214 libres sur la machine
+- Les ports 27119 à 27121, 27211 à 27214, 27221 à 27224 et 27231 à 27234 libres sur la machine
 - Pour la suite du projet : le port 27017 libre (aucun autre MongoDB lancé)
 
 ## Lancer le cluster
@@ -69,17 +68,20 @@ Sortie attendue (extrait) :
    secondaire_a_1  SECONDARY
    secondaire_a_2  SECONDARY
    secondaire_a_3  SECONDARY
+
+(idem pour rs_b et rs_c)
 ```
 
 Le serveur chef (`PRIMARY`) peut varier d'un lancement à l'autre pour
-`rs_config` ; pour `rs_a`, `principal_a` reprend la place de chef de lui-même.
+`rs_config` ; pour les shards, le principal (`principal_a`, `_b`, `_c`) reprend
+la place de chef de lui-même. Un lancement complet depuis zéro dure environ une minute.
 
 ## Lancer les tests
 
 Le cluster doit être démarré.
 
 ```
-python -m unittest tests.test_config_servers tests.test_shard_rs_a -v
+python -m unittest tests.test_config_servers tests.test_shards -v
 ```
 
 ## Arrêter ou remettre à zéro
@@ -114,6 +116,7 @@ sorties réelles, pour pouvoir la refaire à la main :
 - [Partie 1 : l'architecture](docs/Partie1_architecture.docx)
 - [Partie 2 : les serveurs de configuration](docs/Partie2_serveurs_de_configuration.docx)
 - [Partie 3 : le premier shard `rs_a`](docs/Partie3_shard_rs_a.docx)
+- [Partie 4 : les shards `rs_b` et `rs_c`](docs/Partie4_shards_rs_b_rs_c.docx)
 
 ## Sources
 
