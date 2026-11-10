@@ -1,0 +1,283 @@
+B.A.-BA DE DOCKER POUR LE PROJET MONGODB
+=========================================
+
+PARTIE 0 - L'IDÉE GÉNÉRALE (à lire d'abord)
+-------------------------------------------
+
+Docker permet de faire tourner plein de petits "ordinateurs" dans notre
+ordinateur. Chacun s'appelle un CONTENEUR. Au lieu d'acheter 12 vrais serveurs,
+on lance 12 conteneurs. Chaque conteneur est une boîte isolée qui contient un
+programme (ici MongoDB).
+
+Le fichier docker-compose.yml est le PLAN de tous ces conteneurs. Il dit :
+"je veux 19 boîtes, voilà ce que contient chacune, voilà comment elles sont
+reliées". Ensuite, une seule commande (docker compose up) les crée toutes.
+
+Pour comprendre notre projet, imaginons une grande bibliothèque :
+
+  - La bibliothèque est trop grosse pour un seul bâtiment, alors on range les
+    livres dans 3 bâtiments (a, b, c). Chacun garde une partie des livres.
+    C'est le "sharding" (éclatement). Les 3 bâtiments = les 3 serveurs
+    principaux (principal_a, principal_b, principal_c).
+
+  - Pour ne rien perdre si un bâtiment brûle, chaque bâtiment a 3 copies
+    complètes de ses livres, rangées ailleurs. C'est la "réplication".
+    Les copies = les serveurs secondaires (secondaire_a_1, secondaire_a_2,
+    secondaire_a_3...).
+
+  - À l'entrée, il y a un accueil. Le visiteur demande un livre, l'accueil sait
+    dans quel bâtiment il est et l'y envoie. Les accueils = les routeurs
+    (routeur_1 et routeur_2). Il y en a 2 : si l'un est fermé, l'autre répond.
+
+  - L'accueil a besoin d'un catalogue qui dit "tel livre est dans tel
+    bâtiment". Ce catalogue = les serveurs de configuration (serveurs en plus
+    que le sujet appelle "d'autres serveurs, si besoin").
+
+  - Devant la bibliothèque, une porte d'entrée unique envoie chaque visiteur
+    vers l'un des deux accueils. Cette porte = le proxy.
+
+  - Enfin, un cahier où l'on note chaque modification, pour pouvoir revenir
+    en arrière = le serveur historique.
+
+Chacun des mots ci-dessous est une ligne qu'on écrit dans le plan
+(docker-compose.yml) ou une option qu'on donne à MongoDB.
+
+Exemple de plan pour UN serveur, que l'on va décortiquer mot par mot :
+
+    services:                                    <- la liste des boîtes
+      principal_a:                               <- une boîte
+        image: mongo:7                           <- ce qu'il y a dedans
+        container_name: principal_a              <- son nom
+        command: mongod --replSet rs_a --shardsvr --bind_ip_all
+        ports:
+          - "27018:27018"
+        volumes:
+          - donnees_a:/data/db
+        networks:
+          - reseau_mongo
+        restart: unless-stopped
+
+
+PARTIE 1 - LES MOTS DU FICHIER DOCKER-COMPOSE
+---------------------------------------------
+
+1) services
+  C'est quoi ? La liste de toutes les boîtes (conteneurs) que l'on veut.
+  Comparaison : la liste des invités d'une fête. Chaque ligne de la liste
+  est une boîte qui sera créée.
+  Dans le projet : un "service" par serveur (routeur_1, principal_a, ...).
+
+2) image
+  C'est quoi ? Le modèle de la boîte : un paquet déjà prêt qui contient le
+  programme à faire tourner. Docker le télécharge tout seul sur Internet
+  (Docker Hub) la première fois.
+  Comparaison : image = la recette d'un gâteau ; conteneur = un gâteau fait
+  avec cette recette. On peut faire 12 gâteaux avec une seule recette.
+  Exemple : image: mongo:7   (MongoDB, version 7)
+  On précise la version pour que tout le monde ait exactement la même.
+
+3) build
+  C'est quoi ? Au lieu de télécharger une image toute faite, on la fabrique
+  nous-mêmes à partir d'un petit fichier de recette (le Dockerfile).
+  Exemple : build: ./mon_dossier   (Docker lit ./mon_dossier/Dockerfile)
+  Quand l'utiliser ? Si on veut une boîte personnalisée, par exemple MongoDB
+  plus un script Python. Si l'image mongo suffit, on n'en a pas besoin.
+  Image ou build : on utilise l'un ou l'autre pour dire d'où vient la boîte.
+
+4) command
+  C'est quoi ? L'ordre de démarrage donné à la boîte. Chaque image a un ordre
+  par défaut ; "command" le remplace par le nôtre.
+  Dans le projet, c'est là qu'on dit à MongoDB quel rôle il joue :
+    command: mongod --replSet rs_a --shardsvr --bind_ip_all
+  ("mongod" est le programme serveur de MongoDB ; ce qui suit ce sont ses
+  options, expliquées plus bas.)
+
+5) container_name
+  C'est quoi ? Le nom de la boîte. Sans cette ligne, Docker choisit un nom
+  bizarre du genre projet-principal_a-1.
+  Dans le projet : le sujet impose des noms précis (routeur_1, principal_a,
+  secondaire_a_1, historique...). On les écrit donc ici.
+  Bonus : le nom sert d'ADRESSE. Un serveur joint un autre en écrivant juste
+  son nom (principal_a). Deux boîtes ne peuvent pas avoir le même nom.
+
+6) volumes
+  C'est quoi ? Un dossier qui est gardé EN DEHORS de la boîte.
+  Problème : quand on supprime une boîte, tout ce qu'elle contenait
+  disparaît, donc la base de données aussi.
+  Solution : le volume est un coffre-fort à côté. La boîte y écrit, et si on
+  la détruit puis la recrée, les données sont encore là.
+  Exemple : donnees_a:/data/db  se lit "le coffre donnees_a est branché sur
+  le dossier /data/db de la boîte". /data/db est l'endroit où MongoDB range
+  ses données.
+  On peut aussi brancher un dossier de notre PC (./scripts:/scripts) pour
+  donner des fichiers à la boîte (par exemple books.json).
+
+7) ports
+  C'est quoi ? Une porte entre notre PC et la boîte. Format : PORT_PC:PORT_BOÎTE.
+  Exemple : "27017:27017" veut dire "ce qui frappe à la porte 27017 de mon PC
+  est envoyé à la porte 27017 de la boîte".
+  À savoir : les boîtes entre elles n'ont pas besoin de ces portes, elles se
+  parlent directement. Il ne faut donc ouvrir que ce que NOUS voulons
+  atteindre depuis le PC (par exemple les routeurs).
+  Deux boîtes ne peuvent pas utiliser le même port côté PC : il faut les
+  décaler (27017, 27018, 27019...).
+
+8) networks
+  C'est quoi ? Un réseau privé entre les boîtes, comme un réseau Wi-Fi qui
+  leur est réservé. Sur le même réseau, les boîtes se trouvent grâce à leur
+  nom (voir container_name).
+  Dans le projet : tous nos serveurs sont sur le même réseau, sinon le
+  routeur ne pourrait pas joindre les serveurs de données.
+
+9) depends_on
+  C'est quoi ? "Ne me démarre pas avant celui-là". Cela règle l'ordre
+  d'allumage.
+  Exemple : un routeur ne peut pas démarrer avant les serveurs de
+  configuration, sinon il ne trouve pas son catalogue.
+  Piège : par défaut, Docker attend seulement que l'autre boîte soit
+  ALLUMÉE, pas qu'elle soit PRÊTE (MongoDB met quelques secondes à être
+  prêt). Pour attendre vraiment, on le combine avec healthcheck (point 15) :
+    depends_on:
+      config_1:
+        condition: service_healthy
+
+10) environment
+  C'est quoi ? Des réglages passés à la boîte, comme des post-it collés
+  dessus. Chaque image lit ceux qui l'intéressent.
+  Exemple pour mongo :
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: motdepasse
+  Cela crée un administrateur au tout premier lancement (si la base est
+  vide). C'est ce qui sera utile pour la partie sécurité du projet.
+
+11) restart
+  C'est quoi ? Ce que Docker fait si la boîte s'arrête (plantage, redémarrage
+  du PC...).
+    no              ne rien faire (c'est le défaut)
+    always          toujours la relancer
+    unless-stopped  la relancer, sauf si c'est nous qui l'avons arrêtée
+    on-failure      la relancer seulement si elle a planté
+  Pour un serveur de base de données, unless-stopped est un bon choix.
+
+
+PARTIE 2 - LES OPTIONS DE MONGODB (dans "command")
+--------------------------------------------------
+
+12) replSet  (le "réplicat")
+  Écriture : --replSet rs_a
+  C'est quoi ? "Je fais partie du groupe de copies qui s'appelle rs_a".
+  Un groupe de copies s'appelle un "replica set". Tous les membres ont les
+  mêmes données. L'un est le PRIMARY (le chef : c'est lui qui reçoit les
+  écritures), les autres sont des SECONDARY (ils recopient le chef).
+  Si le chef tombe en panne, les autres votent et en élisent un nouveau tout
+  seuls.
+  Dans le projet : principal_a, secondaire_a_1, secondaire_a_2 et
+  secondaire_a_3 reçoivent tous --replSet rs_a, donc ils forment un groupe de
+  4 membres. Pareil pour rs_b et rs_c.
+  Attention : écrire l'option ne suffit pas. Il faut ensuite lancer UNE FOIS la
+  commande rs.initiate(...) dans mongosh pour dire "voici les membres du
+  groupe".
+
+13) shardsvr  (l'"éclat")
+  Écriture : --shardsvr
+  C'est quoi ? "Mon groupe est un des morceaux de la base". Quand une base est
+  trop grosse, on la coupe en morceaux, et chaque morceau (appelé shard)
+  est rangé dans un groupe différent. Chaque groupe ne garde donc qu'une
+  partie des documents. Dans la bibliothèque, c'est un bâtiment.
+  À savoir :
+    - avec cette option, le port par défaut de MongoDB devient 27018 ;
+    - il faut ensuite déclarer les shards au routeur (commande sh.addShard) ;
+    - les serveurs de configuration utilisent, eux, l'option --configsvr
+      (port 27019 par défaut).
+  Dans le projet : les groupes rs_a, rs_b et rs_c sont les 3 shards.
+
+14) bind_ip_all
+  Écriture : --bind_ip_all
+  C'est quoi ? Par défaut, MongoDB est timide : il n'écoute que ce qui vient
+  de sa propre boîte (l'adresse 127.0.0.1). Mais nos serveurs doivent se
+  parler entre boîtes.
+  --bind_ip_all signifie "écoute tout le monde, d'où que ça vienne".
+  Sans cela, les autres serveurs ne peuvent pas se connecter : c'est une
+  erreur très courante dans ce genre de projet.
+  Attention : si on n'a pas mis de mot de passe, n'importe qui sur le réseau
+  peut lire la base. C'est pour ça qu'on n'ouvre pas ces ports vers
+  l'extérieur, et qu'on ajoute de la sécurité dans la version 2 du projet.
+
+
+PARTIE 3 - SAVOIR SI UN SERVEUR EST VRAIMENT PRÊT
+-------------------------------------------------
+
+15) healthcheck
+  C'est quoi ? Un contrôle de santé automatique. Docker pose régulièrement
+  une question à la boîte ("ça va ?") et note la réponse : starting (en
+  démarrage), healthy (en forme) ou unhealthy (en panne).
+  Pourquoi ? Une boîte peut être allumée sans que MongoDB soit encore prêt.
+  Avec healthcheck + depends_on, un serveur attend que l'autre soit
+  réellement en forme avant de démarrer.
+  Il contient trois réglages : test, interval, timeout (ci-dessous).
+
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+16) test
+  C'est quoi ? La question posée par le contrôle de santé : une commande
+  lancée DANS la boîte.
+  Règle : si la commande réussit (elle rend le code 0), la boîte est
+  "healthy" ; si elle échoue, c'est un mauvais point.
+  Ici, "db.adminCommand('ping')" demande à MongoDB "es-tu là ?". S'il répond,
+  c'est bon.
+  ("CMD" lance la commande telle quelle ; "CMD-SHELL" passe par un shell.)
+
+17) interval
+  C'est quoi ? Le temps entre deux contrôles. Exemple : interval: 10s veut
+  dire "pose la question toutes les 10 secondes" (30 s par défaut).
+  Court : on voit vite que le serveur est prêt. Long : moins de contrôles.
+
+18) timeout
+  C'est quoi ? Le temps maximum qu'on laisse à UN contrôle pour répondre.
+  Exemple : timeout: 5s veut dire "si pas de réponse en 5 secondes, on compte
+  ce contrôle comme raté".
+  Il doit être plus court que interval.
+  (Deux réglages voisins : retries = combien d'échecs de suite avant de dire
+  "unhealthy" ; start_period = temps de grâce au démarrage.)
+
+
+PARTIE 4 - POUR ORGANISER SON TRAVAIL
+-------------------------------------
+
+19) develop
+  C'est quoi ? Un réglage pour le travail en cours de développement. On y
+  décrit ce que Docker doit faire quand on modifie un fichier du projet, avec
+  la commande "docker compose watch".
+  Exemple : "si je change mon fichier Python, recopie-le dans la boîte" (action
+  sync), ou "reconstruis la boîte" (action rebuild).
+  Utilité : on modifie le code sans tout arrêter et relancer à la main.
+  Ce n'est pas indispensable pour faire fonctionner le cluster.
+
+20) include
+  C'est quoi ? Une façon de découper un gros plan en plusieurs petits
+  fichiers, puis de les réunir.
+  Exemple :
+    include:
+      - shards.yml
+      - routeurs.yml
+  Comparaison : un livre découpé en chapitres, chacun dans son fichier.
+  Une seule commande (docker compose up) lance l'ensemble.
+  Ce n'est pas obligatoire : on peut tout mettre dans un seul fichier.
+
+
+COMMANDES À CONNAÎTRE
+---------------------
+
+  docker compose up -d       créer et lancer toutes les boîtes (-d = en
+                             arrière-plan)
+  docker compose ps          voir l'état de chaque boîte
+  docker compose logs nom    lire les messages d'une boîte (utile en cas
+                             d'erreur)
+  docker compose down        arrêter et supprimer les boîtes (les volumes,
+                             donc les données, restent)
+  docker compose down -v     idem, et supprimer aussi les données
