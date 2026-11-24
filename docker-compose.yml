@@ -1,6 +1,7 @@
 # =====================================================================
 # Cluster MongoDB : plan de tous les conteneurs
-# Étape actuelle : serveurs de configuration (rs_config) + les 3 shards (rs_a, rs_b, rs_c)
+# Contenu : serveurs de configuration (rs_config), les 3 shards (rs_a, rs_b, rs_c)
+# et les 2 routeurs. (Le proxy et l'historique sont ajoutés plus bas.)
 # =====================================================================
 
 # Nom du projet Compose : préfixe des réseaux et des volumes créés.
@@ -55,6 +56,38 @@ x-shard-commun: &shard-commun
       condition: service_healthy
   healthcheck:
     test: ["CMD", "mongosh", "--port", "27018", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+    interval: 5s
+    timeout: 5s
+    retries: 10
+    start_period: 10s
+
+# ---------------------------------------------------------------------
+# Modèle commun aux routeurs (programme mongos).
+# Un routeur ne stocke aucune donnée : il lit le catalogue sur les serveurs de
+# configuration et envoie chaque requête au bon shard.
+# ---------------------------------------------------------------------
+x-routeur-commun: &routeur-commun
+  image: mongo:8.3.11
+  restart: unless-stopped
+  networks:
+    - reseau_mongo
+  command: >
+    mongos
+    --configdb rs_config/config_1:27019,config_2:27019,config_3:27019
+    --bind_ip_all
+    --port 27017
+  # --configdb nom_du_groupe/adresses : où trouver le catalogue (le groupe rs_config)
+  # --bind_ip_all                    : accepte les connexions des autres conteneurs
+  # --port 27017                     : port classique de MongoDB
+  depends_on:                      # démarrer APRÈS les serveurs de configuration
+    config_1:
+      condition: service_healthy
+    config_2:
+      condition: service_healthy
+    config_3:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD", "mongosh", "--port", "27017", "--quiet", "--eval", "db.adminCommand('ping').ok"]
     interval: 5s
     timeout: 5s
     retries: 10
@@ -231,6 +264,78 @@ services:
     ports:
       - "127.0.0.1:27234:27018"
 
+  # ---- Les 2 routeurs -------------------------------------------------
+  # Aucun volume : un routeur ne garde pas de données.
+  routeur_1:
+    <<: *routeur-commun
+    container_name: routeur_1
+    ports:
+      - "127.0.0.1:27301:27017"           # accessible depuis ce PC seulement (mise au point)
+
+  routeur_2:
+    <<: *routeur-commun
+    container_name: routeur_2
+    ports:
+      - "127.0.0.1:27302:27017"
+
+  # ---- Le proxy : point d'entrée unique, port classique 27017 -------------
+  # La configuration est dans config/haproxy.cfg.
+  proxy:
+    image: haproxy:3.0
+    container_name: proxy
+    restart: unless-stopped
+    networks:
+      - reseau_mongo
+    volumes:
+      - ./config:/usr/local/etc/haproxy:ro   # le dossier doit contenir haproxy.cfg
+    depends_on:
+      routeur_1:
+        condition: service_healthy
+      routeur_2:
+        condition: service_healthy
+    ports:
+      - "27017:27017"                       # le port que le test utilise sur ce PC
+
+  # ---- L'historique : sauvegarde de toutes les modifications ------------
+  # "historique" est un MongoDB ordinaire (sans groupe de copies).
+  historique:
+    image: mongo:8.3.11
+    container_name: historique
+    restart: unless-stopped
+    networks:
+      - reseau_mongo
+    command: >
+      mongod --port 27017 --bind_ip_all --wiredTigerCacheSizeGB 0.25
+    volumes:
+      - donnees_historique:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--port", "27017", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    ports:
+      - "127.0.0.1:27401:27017"             # accessible depuis ce PC seulement (mise au point)
+
+  # Le programme qui écoute le cluster et écrit dans "historique" (voir ecouteur/).
+  # "build" fabrique l'image à partir du dossier ecouteur/ (Dockerfile).
+  ecouteur_historique:
+    build: ./ecouteur
+    container_name: ecouteur_historique
+    restart: unless-stopped
+    networks:
+      - reseau_mongo
+    environment:
+      URI_CLUSTER: mongodb://routeur_1:27017,routeur_2:27017
+      URI_HISTORIQUE: mongodb://historique:27017
+    depends_on:
+      historique:
+        condition: service_healthy
+      routeur_1:
+        condition: service_healthy
+      routeur_2:
+        condition: service_healthy
+
 # ---------------------------------------------------------------------
 # Réseau et volumes
 # ---------------------------------------------------------------------
@@ -253,3 +358,4 @@ volumes:                           # un coffre de données par serveur
   donnees_secondaire_c_1:
   donnees_secondaire_c_2:
   donnees_secondaire_c_3:
+  donnees_historique:

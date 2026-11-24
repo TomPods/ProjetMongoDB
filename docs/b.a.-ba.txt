@@ -5,12 +5,12 @@ PARTIE 0 - L'IDÉE GÉNÉRALE (à lire d'abord)
 -------------------------------------------
 
 Docker permet de faire tourner plein de petits "ordinateurs" dans notre
-ordinateur. Chacun s'appelle un CONTENEUR. Au lieu d'acheter 19 vrais serveurs,
-on lance 19 conteneurs. Chaque conteneur est une boîte isolée qui contient un
+ordinateur. Chacun s'appelle un CONTENEUR. Au lieu d'acheter 20 vrais serveurs,
+on lance 20 conteneurs. Chaque conteneur est une boîte isolée qui contient un
 programme (ici MongoDB).
 
 Le fichier docker-compose.yml est le PLAN de tous ces conteneurs. Il dit :
-"je veux 19 boîtes, voilà ce que contient chacune, voilà comment elles sont
+"je veux 20 boîtes, voilà ce que contient chacune, voilà comment elles sont
 reliées". Ensuite, une seule commande (docker compose up) les crée toutes.
 
 Pour comprendre notre projet, imaginons une grande bibliothèque :
@@ -83,6 +83,10 @@ PARTIE 1 - LES MOTS DU FICHIER DOCKER-COMPOSE
   Quand l'utiliser ? Si on veut une boîte personnalisée, par exemple MongoDB
   plus un script Python. Si l'image mongo suffit, on n'en a pas besoin.
   Image ou build : on utilise l'un ou l'autre pour dire d'où vient la boîte.
+  Dans le projet : le programme qui alimente l'historique (service
+  ecouteur_historique) est fabriqué avec "build: ./ecouteur", car aucune image
+  toute faite ne contient notre programme Python. Tous les autres services
+  utilisent "image".
 
 4) command
   C'est quoi ? L'ordre de démarrage donné à la boîte. Chaque image a un ordre
